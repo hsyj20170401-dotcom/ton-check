@@ -842,26 +842,6 @@ function Result({ data, skinSample, imgUrl, onReset, onAddPhoto, kakaoReady, kak
         >
           다시 진단하기
         </button>
-        <button onClick={onAddPhoto} style={{
-          fontFamily:font, padding:"12px 32px", borderRadius:50,
-          background:"#fff", color:"#1a1a1a", fontSize:14, fontWeight:500,
-          border:"1px solid #ddd", cursor:"pointer", transition:"all .2s",
-        }}
-        onMouseEnter={e => e.currentTarget.style.borderColor="#aaa"}
-        onMouseLeave={e => e.currentTarget.style.borderColor="#ddd"}
-        >
-          사진 추가하기
-        </button>
-        <button onClick={() => setShareOpen(true)} style={{
-          fontFamily:font, padding:"12px 32px", borderRadius:50,
-          background:"#fff", color:"#1a1a1a", fontSize:14, fontWeight:600,
-          border:"1px solid #ddd", cursor:"pointer", transition:"all .2s",
-        }}
-        onMouseEnter={e => e.currentTarget.style.borderColor="#aaa"}
-        onMouseLeave={e => e.currentTarget.style.borderColor="#ddd"}
-        >
-          공유하기
-        </button>
       </div>
 
       <p style={{ fontFamily:font, textAlign:"center", fontSize:11, color:"#ddd", marginTop:20, lineHeight:1.5 }}>
