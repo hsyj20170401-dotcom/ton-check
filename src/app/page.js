@@ -64,9 +64,12 @@ function estimateWhiteBalance(imageData, w, h) {
   if(!c)return{rScale:1,gScale:1,bScale:1,confidence:"neutral"};
   const aR=tR/c,aG=tG/c,aB=tB/c,gray=(aR+aG+aB)/3;
   const dev=Math.max(Math.abs(aR-gray)/gray,Math.abs(aG-gray)/gray,Math.abs(aB-gray)/gray);
-  return{rScale:gray/aR,gScale:gray/aG,bScale:gray/aB,confidence:dev>0.03&&dev<0.4?"high":dev<0.03?"neutral":"uncertain"};
+  return{rScale:gray/aR,gScale:gray/aG,bScale:gray/aB,confidence:dev>0.02&&dev<0.45?"high":dev<0.02?"neutral":"uncertain"};
 }
-function applyWB(r,g,b,wb){const s=0.6;return{r:Math.max(0,Math.min(255,Math.round(r*(1+(wb.rScale-1)*s)))),g:Math.max(0,Math.min(255,Math.round(g*(1+(wb.gScale-1)*s)))),b:Math.max(0,Math.min(255,Math.round(b*(1+(wb.bScale-1)*s))))}}
+function applyWB(r,g,b,wb){
+  const s=wb.confidence==="high"?0.85:wb.confidence==="uncertain"?0.65:0.6;
+  return{r:Math.max(0,Math.min(255,Math.round(r*(1+(wb.rScale-1)*s)))),g:Math.max(0,Math.min(255,Math.round(g*(1+(wb.gScale-1)*s)))),b:Math.max(0,Math.min(255,Math.round(b*(1+(wb.bScale-1)*s))))}
+}
 function detectFace(imageData,w,h){
   const d=imageData.data,skin=new Uint8Array(w*h);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4,r=d[i],g=d[i+1],b=d[i+2];
@@ -84,11 +87,11 @@ function detectFace(imageData,w,h){
 function sampleSkin(imageData,w,h,face,wb){
   const d=imageData.data,{bounds:bn,center:cn,fw,fh,skin}=face;
   const regions=[
-    {name:"이마",cx:cn.x,cy:bn.top+fh*0.18,rad:fw*0.12,wt:1.2},
-    {name:"왼쪽 볼",cx:cn.x-fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.5},
-    {name:"오른쪽 볼",cx:cn.x+fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.5},
-    {name:"턱",cx:cn.x,cy:bn.bottom-fh*0.12,rad:fw*0.10,wt:0.8},
-    {name:"코 옆",cx:cn.x-fw*0.08,cy:cn.y-fh*0.02,rad:fw*0.06,wt:1.0},
+    {name:"이마",cx:cn.x,cy:bn.top+fh*0.20,rad:fw*0.12,wt:1.6},
+    {name:"왼쪽 볼",cx:cn.x-fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.1},
+    {name:"오른쪽 볼",cx:cn.x+fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.1},
+    {name:"턱",cx:cn.x,cy:bn.bottom-fh*0.12,rad:fw*0.10,wt:0.7},
+    {name:"코 옆",cx:cn.x-fw*0.08,cy:cn.y-fh*0.02,rad:fw*0.06,wt:0.9},
   ];
   const rr=[];let twR=0,twG=0,twB=0,tw=0;
   for(const rg of regions){let sR=0,sG=0,sB=0,cnt=0;const rd=Math.floor(rg.rad),cx=Math.floor(rg.cx),cy=Math.floor(rg.cy);
@@ -111,12 +114,12 @@ function sampleSkin(imageData,w,h,face,wb){
 // ═══════════════════════════════════════════════════════════════════
 function diagnose(skinRgb) {
   const {r,g,b}=skinRgb,hsl=rgbToHsl(r,g,b),lab=rgbToLab(r,g,b);
-  const bAxis=lab.b*2,aAxis=lab.a*0.6;
-  let hueS=0;if(hsl.h<25)hueS=(25-hsl.h)*0.8;else if(hsl.h<45)hueS=5;else if(hsl.h>330)hueS=-(hsl.h-330)*0.6;else if(hsl.h>300)hueS=-10;
-  const rbD=(r-b)*0.12,rgP=(r>g&&g>b)?4:(b>g&&g>r)?-4:0;
+  const bAxis=lab.b*1.5,aAxis=lab.a*0.4;
+  let hueS=0;if(hsl.h<25)hueS=(25-hsl.h)*0.6;else if(hsl.h<45)hueS=3;else if(hsl.h>330)hueS=-(hsl.h-330)*0.5;else if(hsl.h>300)hueS=-8;
+  const rbD=(r-b)*0.08,rgP=(r>g&&g>b)?3:(b>g&&g>r)?-3:0;
   const total=bAxis+aAxis+hueS+rbD+rgP;
   const warmS=Math.max(0,total),coolS=Math.max(0,-total),toneT=warmS+coolS;
-  const warmR=toneT>0?warmS/toneT:0.5,isW=warmR>=0.5;
+  const warmR=toneT>0?warmS/toneT:0.5,isW=warmR>=0.54;
   const bright=lab.L,sat=hsl.s,chroma=Math.sqrt(lab.a*lab.a+lab.b*lab.b);
   const muted=sat<25||chroma<15,clear=sat>35&&chroma>22,hi=bright>65,lo=bright<48;
   let season,sub,conf=70;
