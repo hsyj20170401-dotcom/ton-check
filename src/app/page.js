@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import Cropper from "react-easy-crop";
 import * as exifr from "exifr";
 import { S } from "@/app/lib/season-data";
 
@@ -87,11 +88,11 @@ function detectFace(imageData,w,h){
 function sampleSkin(imageData,w,h,face,wb){
   const d=imageData.data,{bounds:bn,center:cn,fw,fh,skin}=face;
   const regions=[
-    {name:"이마",cx:cn.x,cy:bn.top+fh*0.20,rad:fw*0.12,wt:1.6},
-    {name:"왼쪽 볼",cx:cn.x-fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.1},
-    {name:"오른쪽 볼",cx:cn.x+fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:1.1},
-    {name:"턱",cx:cn.x,cy:bn.bottom-fh*0.12,rad:fw*0.10,wt:0.7},
-    {name:"코 옆",cx:cn.x-fw*0.08,cy:cn.y-fh*0.02,rad:fw*0.06,wt:0.9},
+    {name:"이마",cx:cn.x,cy:bn.top+fh*0.20,rad:fw*0.12,wt:1.7},
+    {name:"왼쪽 볼",cx:cn.x-fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:0.95},
+    {name:"오른쪽 볼",cx:cn.x+fw*0.18,cy:cn.y+fh*0.05,rad:fw*0.10,wt:0.95},
+    {name:"턱",cx:cn.x,cy:bn.bottom-fh*0.12,rad:fw*0.10,wt:0.65},
+    {name:"코 옆",cx:cn.x-fw*0.08,cy:cn.y-fh*0.02,rad:fw*0.06,wt:0.8},
   ];
   const rr=[];let twR=0,twG=0,twB=0,tw=0;
   for(const rg of regions){let sR=0,sG=0,sB=0,cnt=0;const rd=Math.floor(rg.rad),cx=Math.floor(rg.cx),cy=Math.floor(rg.cy);
@@ -114,21 +115,25 @@ function sampleSkin(imageData,w,h,face,wb){
 // ═══════════════════════════════════════════════════════════════════
 function diagnose(skinRgb) {
   const {r,g,b}=skinRgb,hsl=rgbToHsl(r,g,b),lab=rgbToLab(r,g,b);
-  const bAxis=lab.b*1.5,aAxis=lab.a*0.4;
-  let hueS=0;if(hsl.h<25)hueS=(25-hsl.h)*0.6;else if(hsl.h<45)hueS=3;else if(hsl.h>330)hueS=-(hsl.h-330)*0.5;else if(hsl.h>300)hueS=-8;
-  const rbD=(r-b)*0.08,rgP=(r>g&&g>b)?3:(b>g&&g>r)?-3:0;
+  const bAxis=lab.b*1.45,aAxis=lab.a*0.35;
+  let hueS=0;if(hsl.h<25)hueS=(25-hsl.h)*0.55;else if(hsl.h<45)hueS=2.5;else if(hsl.h>330)hueS=-(hsl.h-330)*0.45;else if(hsl.h>300)hueS=-7;
+  const rbD=(r-b)*0.07,rgP=(r>g&&g>b)?2.5:(b>g&&g>r)?-2.5:0;
   const total=bAxis+aAxis+hueS+rbD+rgP;
   const warmS=Math.max(0,total),coolS=Math.max(0,-total),toneT=warmS+coolS;
-  const warmR=toneT>0?warmS/toneT:0.5,isW=warmR>=0.54;
+  const warmR=toneT>0?warmS/toneT:0.5;
+  const isNeutral = warmR > 0.46 && warmR < 0.54;
+  const isW = warmR>=0.54;
   const bright=lab.L,sat=hsl.s,chroma=Math.sqrt(lab.a*lab.a+lab.b*lab.b);
   const muted=sat<25||chroma<15,clear=sat>35&&chroma>22,hi=bright>65,lo=bright<48;
   let season,sub,conf=70;
-  if(isW){if(hi||(bright>58&&!lo)){season="spring";if(bright>72){sub="light";conf+=10}else if(clear&&chroma>22){sub="bright";conf+=8}else{sub="warm";conf+=5}}
+  if(isNeutral){
+    season="neutral";sub=null;conf-=5;
+  } else if(isW){if(hi||(bright>58&&!lo)){season="spring";if(bright>72){sub="light";conf+=10}else if(clear&&chroma>22){sub="bright";conf+=8}else{sub="warm";conf+=5}}
     else{season="autumn";if(lo){sub="deep";conf+=10}else if(muted){sub="soft";conf+=8}else{sub="warm";conf+=5}}}
   else{if(hi||(bright>55&&muted)){season="summer";if(bright>70){sub="light";conf+=10}else if(muted||sat<22){sub="soft";conf+=8}else{sub="cool";conf+=5}}
     else{season="winter";if(lo){sub="deep";conf+=10}else if(clear&&chroma>25){sub="bright";conf+=8}else{sub="cool";conf+=5}}}
   conf+=Math.round(Math.abs(warmR-0.5)*30);conf=Math.min(95,Math.max(40,conf));
-  return{season,sub,isWarm:isW,warmR,skinColor:{r,g,b},confidence:conf,lab,hsl,chroma,scores:{w:warmS.toFixed(1),c:coolS.toFixed(1)}};
+  return{season,sub,isWarm:isW,isNeutral,warmR,skinColor:{r,g,b},confidence:conf,lab,hsl,chroma,scores:{w:warmS.toFixed(1),c:coolS.toFixed(1)}};
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -149,6 +154,218 @@ const CSS = `
 .fade-up{animation:fadeUp .5s ease both}
 .fade-up-1{animation-delay:.1s}.fade-up-2{animation-delay:.2s}.fade-up-3{animation-delay:.3s}.fade-up-4{animation-delay:.4s}
 `;
+
+async function getCroppedImg(imageSrc, pixelCrop) {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = imageSrc;
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.95);
+  });
+}
+
+function parseGradientColors(gradient) {
+  const matches = gradient.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})/g);
+  return matches && matches.length ? matches : ["#f8f8f8", "#ffffff"];
+}
+
+function createLinearGradient(ctx, w, h, angleDeg, colors) {
+  const rad = (angleDeg - 90) * (Math.PI / 180);
+  const x0 = w / 2 - Math.cos(rad) * (w / 2);
+  const y0 = h / 2 - Math.sin(rad) * (h / 2);
+  const x1 = w / 2 + Math.cos(rad) * (w / 2);
+  const y1 = h / 2 + Math.sin(rad) * (h / 2);
+  const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+  const stops = colors.length - 1 || 1;
+  colors.forEach((c, i) => grad.addColorStop(i / stops, c));
+  return grad;
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+function drawPill(ctx, text, centerX, centerY, fontSize, paddingX, paddingY, bg, color) {
+  ctx.font = `500 ${fontSize}px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  const textW = ctx.measureText(text).width;
+  const w = textW + paddingX * 2;
+  const h = fontSize + paddingY * 2;
+  const x = centerX - w / 2;
+  const y = centerY - h / 2;
+  ctx.fillStyle = bg;
+  drawRoundedRect(ctx, x, y, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, centerX, centerY + 1);
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  let drawY = y;
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line + words[i] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && i > 0) {
+      ctx.fillText(line.trim(), x, drawY);
+      line = words[i] + " ";
+      drawY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) {
+    ctx.fillText(line.trim(), x, drawY);
+  }
+  return drawY;
+}
+
+async function renderShareCardCanvas(type, data, sub, s) {
+  const presets = {
+    feed: { w: 1080, h: 1350, pad: 72, paletteCols: 4, paletteRows: 2, chip: 170, gap: 16 },
+    story: { w: 1080, h: 1920, pad: 96, paletteCols: 2, paletteRows: 4, chip: 240, gap: 20 },
+    og: { w: 1200, h: 630, pad: 56, paletteCols: 3, paletteRows: 2, chip: 140, gap: 14 },
+  };
+  const preset = presets[type] || presets.feed;
+  const { w, h, pad } = preset;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  const colors = parseGradientColors(s.gradient);
+  ctx.fillStyle = createLinearGradient(ctx, w, h, 135, colors);
+  ctx.fillRect(0, 0, w, h);
+
+  if (document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+
+  ctx.fillStyle = "#999";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = "400 22px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.fillText("your personal color", w / 2, pad + 22);
+  ctx.font = "500 20px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  ctx.fillStyle = "#bbb";
+  ctx.fillText("TONCHECK", w / 2, pad + 50);
+
+  if (type === "og") {
+    const leftX = pad;
+    const rightX = w - pad;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = "700 48px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(s.label, leftX, pad + 120);
+    if (sub) {
+      drawPill(ctx, sub.label, leftX + 90, pad + 170, 18, 16, 8, "rgba(0,0,0,0.06)", "#555");
+    }
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = "600 22px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    wrapText(ctx, `"${s.tagline}"`, leftX, pad + 230, w * 0.5, 30);
+
+    const paletteW = preset.paletteCols * preset.chip + (preset.paletteCols - 1) * preset.gap;
+    const paletteH = preset.paletteRows * preset.chip + (preset.paletteRows - 1) * preset.gap;
+    const paletteX = rightX - paletteW;
+    const paletteY = h / 2 - paletteH / 2 + 10;
+    const palette = s.colors.slice(0, preset.paletteCols * preset.paletteRows);
+    palette.forEach((c, i) => {
+      const row = Math.floor(i / preset.paletteCols);
+      const col = i % preset.paletteCols;
+      const x = paletteX + col * (preset.chip + preset.gap);
+      const y = paletteY + row * (preset.chip + preset.gap);
+      ctx.fillStyle = c.hex;
+      drawRoundedRect(ctx, x, y, preset.chip, preset.chip, 18);
+      ctx.fill();
+    });
+  } else {
+    const titleY = pad + (type === "story" ? 220 : 170);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.textAlign = "center";
+    ctx.font = `700 ${type === "story" ? 80 : 64}px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.fillText(s.label, w / 2, titleY);
+
+    if (sub) {
+      drawPill(ctx, sub.label, w / 2, titleY + (type === "story" ? 70 : 56), type === "story" ? 26 : 24, 22, 10, "rgba(0,0,0,0.06)", "#555");
+    }
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = `600 ${type === "story" ? 30 : 28}px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.textAlign = "center";
+    wrapText(ctx, `"${s.tagline}"`, w / 2, titleY + (type === "story" ? 140 : 120), w * 0.7, type === "story" ? 42 : 36);
+
+    const palette = s.colors.slice(0, preset.paletteCols * preset.paletteRows);
+    const paletteW = preset.paletteCols * preset.chip + (preset.paletteCols - 1) * preset.gap;
+    const paletteX = w / 2 - paletteW / 2;
+    const paletteY = type === "story" ? pad + 520 : pad + 420;
+    palette.forEach((c, i) => {
+      const row = Math.floor(i / preset.paletteCols);
+      const col = i % preset.paletteCols;
+      const x = paletteX + col * (preset.chip + preset.gap);
+      const y = paletteY + row * (preset.chip + preset.gap);
+      ctx.fillStyle = c.hex;
+      drawRoundedRect(ctx, x, y, preset.chip, preset.chip, type === "story" ? 26 : 20);
+      ctx.fill();
+      ctx.fillStyle = "#888";
+      ctx.font = "400 18px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(c.name, x + preset.chip / 2, y + preset.chip + 24);
+    });
+
+    ctx.fillStyle = "#999";
+    ctx.font = "400 20px Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("더 정확한 결과는 다른 사진으로 확인하세요", w / 2, h - pad - 16);
+  }
+
+  return canvas;
+}
+
+async function renderShareCardBlob(type, data, sub, s) {
+  const canvas = await renderShareCardCanvas(type, data, sub, s);
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/png", 0.95);
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 // ═══════════════════════════════════════════════════════════════════
 //  COMPONENTS
@@ -205,9 +422,6 @@ function Hero({ onStart }) {
         컬러 찾으러 가기
       </button>
 
-      <p style={{ fontFamily:font, fontSize:11, color:"#ccc", marginTop:24 }}>
-        43,000명이 넘는 분들이 진단을 받았어요
-      </p>
     </div>
   );
 }
@@ -765,6 +979,11 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [error, setError] = useState(null);
   const [kakaoReady, setKakaoReady] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const canvas = useRef(null);
   const addRef = useRef(null);
 
@@ -852,6 +1071,35 @@ export default function App() {
     img.src = previewUrl;
   }, [imgUrl]);
 
+  const openCropper = useCallback((file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropSrc(reader.result);
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setCroppedAreaPixels(null);
+      setCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const applyCrop = useCallback(async () => {
+    if (!cropSrc || !croppedAreaPixels) return;
+    try {
+      const blob = await getCroppedImg(cropSrc, croppedAreaPixels);
+      if (!blob) throw new Error("crop-failed");
+      const file = new File([blob], "cropped.jpg", { type: "image/jpeg" });
+      setCropOpen(false);
+      setCropSrc(null);
+      processImage(file);
+    } catch (err) {
+      setError("이미지 자르기에 실패했어요. 다시 시도해주세요.");
+      setCropOpen(false);
+      setCropSrc(null);
+    }
+  }, [cropSrc, croppedAreaPixels, processImage]);
+
   const reset = () => {
     if (imgUrl) {
       URL.revokeObjectURL(imgUrl);
@@ -873,7 +1121,7 @@ export default function App() {
       <style>{CSS}</style>
       <canvas ref={canvas} style={{ display:"none" }}/>
       <input ref={addRef} type="file" accept="image/*" style={{ display:"none" }}
-        onChange={e => { const f=e.target.files[0];if(!f)return;processImage(f);e.target.value="";}} />
+        onChange={e => { const f=e.target.files[0];if(!f)return;openCropper(f);e.target.value="";}} />
 
       <div style={{ maxWidth:480, margin:"0 auto", padding:"0 16px", position:"relative" }}>
 
@@ -904,7 +1152,7 @@ export default function App() {
 
         {/* Pages */}
         {page === "hero" && <Hero onStart={() => setPage("upload")} />}
-        {page === "upload" && <Upload onFile={processImage} busy={false} />}
+        {page === "upload" && <Upload onFile={openCropper} busy={false} />}
         {page === "analyzing" && <Analyzing step={step} />}
         {page === "result" && result && (
           <div style={{ padding:"20px 0" }}>
@@ -917,6 +1165,60 @@ export default function App() {
               kakaoReady={kakaoReady}
               kakaoKey={kakaoKey}
             />
+          </div>
+        )}
+
+        {cropOpen && (
+          <div style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:60,
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            <div style={{
+              width:"min(92vw, 520px)", background:"#fff", borderRadius:20, overflow:"hidden",
+              boxShadow:"0 12px 40px rgba(0,0,0,0.2)", fontFamily:font,
+            }}>
+              <div style={{ padding:"14px 16px", borderBottom:"1px solid #eee", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:14, fontWeight:600, color:"#1a1a1a" }}>사진 자르기</span>
+                <button onClick={() => { setCropOpen(false); setCropSrc(null); }} style={{ border:"none", background:"none", cursor:"pointer", color:"#999" }}>✕</button>
+              </div>
+              <div style={{ position:"relative", width:"100%", height:360, background:"#111" }}>
+                {cropSrc && (
+                  <Cropper
+                    image={cropSrc}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={1}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+                  />
+                )}
+              </div>
+              <div style={{ padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                  <span style={{ fontSize:12, color:"#888" }}>확대</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.05}
+                    value={zoom}
+                    onChange={e => setZoom(Number(e.target.value))}
+                    style={{ width:"100%" }}
+                  />
+                </div>
+                <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                  <button onClick={() => { setCropOpen(false); setCropSrc(null); }} style={{
+                    padding:"10px 16px", borderRadius:10, border:"1px solid #ddd", background:"#fff",
+                    fontSize:13, cursor:"pointer"
+                  }}>취소</button>
+                  <button onClick={applyCrop} style={{
+                    padding:"10px 16px", borderRadius:10, border:"none", background:"#1a1a1a",
+                    color:"#fff", fontSize:13, cursor:"pointer"
+                  }}>적용</button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

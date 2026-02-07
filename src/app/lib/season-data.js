@@ -1,4 +1,27 @@
 export const S = {
+  neutral: {
+    label: "뉴트럴 톤", en: "Neutral",
+    tagline: "차분하고 균형 잡힌, 뉴트럴의 당신",
+    desc: "웜과 쿨 어느 쪽에도 치우치지 않은 균형 타입이에요. 과한 색보다 부드럽고 절제된 색감이 피부를 가장 맑고 안정적으로 보여줘요.",
+    tip: "채도가 너무 높지 않은 컬러를 고르면 실패할 확률이 낮아요. 베이지, 더스티 로즈, 세이지처럼 중립 톤을 먼저 대보세요.",
+    mood: ["차분한", "균형 잡힌", "클린한", "세련된"],
+    accessory: "실버 · 골드 둘 다 OK",
+    subs: {},
+    colors: [
+      {hex:"#E8DCCB",name:"샌드 베이지"},{hex:"#CBB7A3",name:"토프"},
+      {hex:"#BFA8A0",name:"더스티 로즈"},{hex:"#A7B1A6",name:"세이지"},
+      {hex:"#9AA3B2",name:"스모키 블루"},{hex:"#8E8B88",name:"웜 그레이"},
+      {hex:"#D8CFC6",name:"오트밀"},{hex:"#B7B0A4",name:"머쉬룸"},
+      {hex:"#7C808A",name:"소프트 네이비"},{hex:"#C4C7CE",name:"페일 그레이"},
+      {hex:"#D4BFAE",name:"크림 베이지"},{hex:"#AFA9A0",name:"스톤"},
+    ],
+    avoid: [
+      {hex:"#FF6F00",name:"비비드 오렌지"},{hex:"#E91E63",name:"핫 핑크"},
+      {hex:"#1A237E",name:"딥 네이비"},{hex:"#4A148C",name:"딥 퍼플"}
+    ],
+    gradient: "linear-gradient(135deg, #F4EFE8 0%, #ECEFF1 50%, #F3E5F5 100%)",
+    accent: "#BFA8A0",
+  },
   spring: {
     label: "봄 웜톤", en: "Spring Warm",
     tagline: "화사함이 가득한, 봄날의 당신",
